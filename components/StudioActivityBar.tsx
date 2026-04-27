@@ -13,20 +13,20 @@ function fmtTime(s: number) {
 export function StudioActivityBar({ data }: StudioActivityBarProps) {
   const stats = [
     { label: 'Vzdálenost', value: (data.distance / 1000).toFixed(1) + ' km' },
-    { label: 'Převýšení', value: Math.round(data.elevationGain) + ' m' },
+    { label: 'Převýšení', value: Math.round(data.elevationGain) + ' m↑' },
     { label: 'Čas', value: fmtTime(data.movingTime) },
     { label: 'Sport', value: data.sportType },
     ...(data.allPhotos && data.allPhotos.length > 0
-      ? [{ label: 'Fotky', value: String(data.allPhotos.length) }]
+      ? [{ label: 'Trackpoints', value: String(data.allPhotos.length) }]
       : []),
   ]
 
   return (
-    <div className="flex items-center gap-6 px-5 py-2.5 border-b border-white/8 bg-[var(--panel)] shrink-0 overflow-x-auto">
+    <div className="flex items-center gap-7 h-11 px-5 border-b border-[var(--border)] bg-[var(--panel)] shrink-0 overflow-x-auto no-scrollbar">
       {stats.map((s, i) => (
         <div key={i} className="flex items-baseline gap-1.5 shrink-0">
-          <span className="text-white font-semibold text-sm">{s.value}</span>
-          <span className="text-white/35 text-xs">{s.label}</span>
+          <span className="t-mono text-[13px] font-semibold text-white">{s.value}</span>
+          <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider">{s.label}</span>
         </div>
       ))}
     </div>

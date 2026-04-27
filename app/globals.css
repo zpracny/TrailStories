@@ -1,15 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #080810;
+  --bg: #07070d;
+  --bg-2: #0c0c14;
   --panel: #0e0e18;
-  --card: #111118;
-  --border: #1e1e28;
-  --orange: #f97316;
-  --orange-glow: rgba(249,115,22,0.08);
-  --text: #f0f0f4;
-  --muted: #6a6a7a;
-  --subtle: #3a3a4a;
+  --panel-2: #14141f;
+  --card: #131320;
+  --border: #1c1c28;
+  --border-2: #262635;
+  --accent: #ff5b1f;
+  --accent-2: #ff8a3d;
+  --accent-glow: rgba(255, 91, 31, 0.18);
+  --magenta: #e8329c;
+  --lime: #c8ff3e;
+  --text: #f4f4f8;
+  --muted: #8a8a9a;
+  --subtle: #4a4a5a;
+  --dim: #2a2a38;
+  --font-display: var(--font-bebas), "Anton", "Barlow Condensed", sans-serif;
+  --font-ui: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), "SF Mono", ui-monospace, monospace;
 }
 
 @theme inline {
@@ -20,21 +30,196 @@
 html, body {
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
+  overflow-x: hidden;
 }
 
-/* Topografická mřížka pro landing page */
+button { font-family: inherit; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+/* ─── Type system ─── */
+.t-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.005em;
+  line-height: 1.02;
+  font-weight: 400;
+}
+.t-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.t-mono { font-family: var(--font-mono); }
+.t-num {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* ─── Topo grid ─── */
 .topo-grid {
   background-image:
-    linear-gradient(rgba(249,115,22,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(249,115,22,0.03) 1px, transparent 1px),
-    linear-gradient(rgba(249,115,22,0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(249,115,22,0.015) 1px, transparent 1px);
-  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
+    linear-gradient(rgba(255,91,31,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,91,31,0.04) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
 }
 
-/* Maplibre GL overrides */
+/* ─── Noise texture ─── */
+.noise {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.04 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ─── Buttons ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border-2);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.btn:hover { background: rgba(255,255,255,0.08); }
+.btn-primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--accent-2) 0%, var(--accent) 100%);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset, 0 8px 24px -8px var(--accent-glow);
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ─── Chips / Pills ─── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: rgba(255,255,255,0.03);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.chip-active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent-2);
+}
+.chip-dot::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ─── Cards ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.card-glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+}
+
+/* ─── Range slider ─── */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--dim);
+  border-radius: 999px;
+  outline: none;
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  cursor: pointer;
+  border: none;
+}
+
+/* ─── Animations ─── */
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, var(--text) 0%, var(--accent-2) 45%, var(--text) 90%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 4s linear infinite;
+}
+.marquee-track {
+  animation: marquee 40s linear infinite;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-2); }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* ─── Focus ─── */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ─── MapLibre GL overrides ─── */
 .maplibregl-map canvas {
   border-radius: inherit;
 }

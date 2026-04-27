@@ -1,11 +1,12 @@
 'use client'
 import { useState, useCallback, useRef } from 'react'
 import { ActivityStoryData, StoryConfig, ASPECT_DIMENSIONS } from '@/components/StoryGenerator/storyTypes'
-import { StoryPreview } from '@/components/StoryGenerator/StoryPreview'
+import { StoryPreview, StoryPreviewRef } from '@/components/StoryGenerator/StoryPreview'
 import { StudioTopbar } from '@/components/StudioTopbar'
 import { StudioActivityBar } from '@/components/StudioActivityBar'
 import { StudioConfigPanel } from '@/components/StudioConfigPanel'
 import { ExportProgress } from '@/components/ExportProgress'
+import { Timeline } from '@/components/Timeline'
 
 const DEFAULT_CONFIG: StoryConfig = {
   mode: '2d',
@@ -53,14 +54,14 @@ const ASPECT_RATIOS: StoryConfig['aspectRatio'][] = ['9:16', '1:1', '16:9']
 export function Studio({ data }: StudioProps) {
   const [config, setConfig] = useState<StoryConfig>(DEFAULT_CONFIG)
   const [exportProgress, setExportProgress] = useState<number | null>(null)
-  const exportBlobRef = useRef<Blob | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const previewRef = useRef<StoryPreviewRef>(null)
 
   const handleConfigChange = useCallback((patch: Partial<StoryConfig>) => {
     setConfig(prev => ({ ...prev, ...patch }))
   }, [])
 
   const handleExportDone = useCallback((blob: Blob) => {
-    exportBlobRef.current = blob
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -72,17 +73,18 @@ export function Studio({ data }: StudioProps) {
 
   const handleExportStart = useCallback(() => {
     setExportProgress(0)
+    previewRef.current?.exportVideo()
   }, [])
 
   const dims = ASPECT_DIMENSIONS[config.aspectRatio]
+  const isExporting = exportProgress !== null && exportProgress < 1
 
-  // Check iOS Safari MediaRecorder support
   const canExport = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined' &&
     (MediaRecorder.isTypeSupported?.('video/webm') || MediaRecorder.isTypeSupported?.('video/webm;codecs=vp9'))
 
   return (
     <div className="flex flex-col h-dvh bg-[var(--bg)] overflow-hidden">
-      <StudioTopbar data={data} onExport={handleExportStart} isExporting={exportProgress !== null && exportProgress < 1} />
+      <StudioTopbar data={data} onExport={handleExportStart} isExporting={isExporting} />
       <StudioActivityBar data={data} />
 
       {!canExport && (
@@ -93,30 +95,34 @@ export function Studio({ data }: StudioProps) {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Preview panel */}
-        <div className="flex-1 flex flex-col items-center p-4 gap-2 overflow-hidden min-w-0">
-          {/* Aspect ratio switcher */}
-          <div className="flex gap-1.5 shrink-0">
-            {ASPECT_RATIOS.map(ar => (
-              <button
-                key={ar}
-                onClick={() => handleConfigChange({ aspectRatio: ar })}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                  config.aspectRatio === ar
-                    ? 'bg-white/15 text-white'
-                    : 'text-white/30 hover:text-white/60'
-                }`}
-              >
-                {ar}
-              </button>
-            ))}
+        <div
+          className="flex-1 flex flex-col p-6 gap-3 overflow-hidden min-w-0"
+          style={{ background: 'radial-gradient(ellipse at center, rgba(255,91,31,0.04), transparent 70%)' }}
+        >
+          {/* Toolbar */}
+          <div className="flex items-center justify-between shrink-0">
+            <div className="flex gap-1.5">
+              {ASPECT_RATIOS.map(ar => (
+                <button
+                  key={ar}
+                  onClick={() => handleConfigChange({ aspectRatio: ar })}
+                  className={`px-3 py-1 rounded-md text-xs t-mono transition-colors ${
+                    config.aspectRatio === ar
+                      ? 'bg-white/10 text-white'
+                      : 'text-[var(--muted)] hover:text-white'
+                  }`}
+                >
+                  {ar}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              <span className="t-mono">PREVIEW · LIVE</span>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--lime)' }} />
+            </div>
           </div>
 
-          {/*
-            flex-1 + min-h-0 = tato plocha dostane veškerou zbývající výšku.
-            items-center justify-center = preview centrovaný v ploše.
-            Vnitřní div dostane height: 100% pro portrait nebo width: 100% pro landscape,
-            aspect-ratio pak dopočítá druhou dimenzi.
-          */}
+          {/* Preview canvas area */}
           <div className="flex-1 min-h-0 w-full flex items-center justify-center">
             <div
               style={
@@ -126,27 +132,34 @@ export function Studio({ data }: StudioProps) {
               }
             >
               <StoryPreview
+                ref={previewRef}
                 config={config}
                 data={data}
+                isPlaying={isPlaying}
+                onPlayChange={setIsPlaying}
                 onExportProgress={setExportProgress}
                 onExportDone={handleExportDone}
               />
             </div>
           </div>
+
+          {/* Timeline */}
+          <Timeline
+            isPlaying={isPlaying}
+            onTogglePlay={() => setIsPlaying(p => !p)}
+            duration={config.durationSeconds}
+          />
         </div>
 
         {/* Config panel */}
-        <div className="w-64 shrink-0 border-l border-white/8 bg-[var(--panel)] overflow-hidden">
-          <StudioConfigPanel
-            config={config}
-            data={data}
-            onChange={handleConfigChange}
-            disabled={exportProgress !== null && exportProgress < 1}
-          />
-        </div>
+        <StudioConfigPanel
+          config={config}
+          data={data}
+          onChange={handleConfigChange}
+          disabled={isExporting}
+        />
       </div>
 
-      {/* Export overlay */}
       {exportProgress !== null && (
         <ExportProgress
           progress={exportProgress}
