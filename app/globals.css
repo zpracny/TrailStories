@@ -1,26 +1,40 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #080810;
+  --panel: #0e0e18;
+  --card: #111118;
+  --border: #1e1e28;
+  --orange: #f97316;
+  --orange-glow: rgba(249,115,22,0.08);
+  --text: #f0f0f4;
+  --muted: #6a6a7a;
+  --subtle: #3a3a4a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Topografická mřížka pro landing page */
+.topo-grid {
+  background-image:
+    linear-gradient(rgba(249,115,22,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249,115,22,0.03) 1px, transparent 1px),
+    linear-gradient(rgba(249,115,22,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249,115,22,0.015) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
+}
+
+/* Maplibre GL overrides */
+.maplibregl-map canvas {
+  border-radius: inherit;
 }
