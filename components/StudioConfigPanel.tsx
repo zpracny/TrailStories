@@ -272,12 +272,12 @@ export function StudioConfigPanel({ config, data, onChange, disabled }: StudioCo
         <PanelSection title="Časování" id="timing" active={activeSection} setActive={setActiveSection}>
           <div className="space-y-4">
             <RangeRow label="Délka videa" value={config.durationSeconds}
-              min={config.mode === '2d' ? 4 : 3} max={config.mode === '2d' ? 15 : 30}
+              min={config.mode === '2d' ? 4 : 3} max={60}
               step={1} unit=" s" onChange={v => onChange({ durationSeconds: v })} />
             {config.mode === '3d' && (
               <>
                 <RangeRow label="Náklon kamery" value={config.cameraPitch} min={30} max={75} step={5} unit="°" onChange={v => onChange({ cameraPitch: v })} />
-                <RangeRow label="Výška kamery" value={config.cameraAltitude} min={200} max={3000} step={100} unit=" m" onChange={v => onChange({ cameraAltitude: v })} />
+                <RangeRow label="Výška kamery" value={config.cameraAltitude} min={100} max={1200} step={50} unit=" m" onChange={v => onChange({ cameraAltitude: v })} />
                 <RangeRow label="Terén" value={config.terrainExaggeration} min={0.5} max={3} step={0.1} unit="×" onChange={v => onChange({ terrainExaggeration: v })} />
               </>
             )}
