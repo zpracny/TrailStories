@@ -2,8 +2,8 @@ import maplibregl from 'maplibre-gl'
 import { StoryConfig, ActivityStoryData, PhotoGroup, IStoryEngine, ASPECT_DIMENSIONS, EngineExportOptions } from './storyTypes'
 import {
   TRAIL_COLOR_START, TRAIL_COLOR_END, SUMMIT_COLOR, DAY_END_COLOR,
-  STATS_FONT, LOGO_TEXT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
-  EXPORT_FPS,
+  STATS_FONT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
+  EXPORT_FPS, formatActivityDate,
 } from './storyConstants'
 import { decodePolyline, simplifyTrail, computeCumulativeDistances, getPositionAtProgress, haversineDistance } from './trailProjection'
 import { computeCameraPath, interpolateCamera } from './story3DCamera'
@@ -26,6 +26,8 @@ export class Story3DEngine implements IStoryEngine {
   private animFrame: number | null = null
   private lastTime: number | null = null
   private isPlaying = false
+
+  private logoImg: HTMLImageElement | null = null
 
   private photoGroups: PhotoGroup[] = []
   private loadedImages: Map<string, HTMLImageElement> = new Map()
@@ -58,6 +60,14 @@ export class Story3DEngine implements IStoryEngine {
     this.cumulDists = computeCumulativeDistances(this.latlngs)
 
     if (this.latlngs.length === 0) return
+
+    // Load logo image
+    this.logoImg = await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null as unknown as HTMLImageElement)
+      img.src = '/logo.png'
+    })
 
     // Camera path — distance-based keyframes so speed is linear to distance
     this.cameraFrames = computeCameraPath(
@@ -236,17 +246,26 @@ export class Story3DEngine implements IStoryEngine {
     ctx.fillStyle = botFade
     ctx.fillRect(0, h * 0.7, w, h * 0.3)
 
-    // Activity name
+    // Date top-left
     const safeTop = this.config.enableSafeZones ? (SAFE_ZONE_TOP / 1920) * h : h * 0.04
     const nameFontSize = Math.round(h * 0.028)
     ctx.font = `700 ${nameFontSize}px ${STATS_FONT}`
     ctx.fillStyle = '#ffffff'
     ctx.textBaseline = 'top'
     ctx.textAlign = 'left'
-    ctx.fillText(this.data.name, w * 0.06, safeTop + h * 0.02)
+    ctx.fillText(formatActivityDate(this.data.activityStartDate), w * 0.06, safeTop + h * 0.02)
+
+    // Logo top-right
+    if (this.config.showLogo && this.logoImg) {
+      const logoH = Math.round(h * 0.036)
+      const logoW = Math.round(logoH * (this.logoImg.naturalWidth / this.logoImg.naturalHeight))
+      ctx.globalAlpha = 0.85
+      ctx.drawImage(this.logoImg, w - w * 0.06 - logoW, safeTop + h * 0.015, logoW, logoH)
+      ctx.globalAlpha = 1
+    }
 
     // Stats
-    this.drawHudStats(ctx, w, h)
+    this.drawHudStats(ctx, w, h, progress)
 
     // Progress bar
     const safeBottom = this.config.enableSafeZones ? (SAFE_ZONE_BOTTOM / 1920) * h : 0
@@ -259,16 +278,6 @@ export class Story3DEngine implements IStoryEngine {
     grad.addColorStop(1, TRAIL_COLOR_END)
     ctx.fillStyle = grad
     ctx.fillRect(0, barY, w * progress, barH)
-
-    // Logo
-    if (this.config.showLogo) {
-      const logoSize = Math.round(h * 0.018)
-      ctx.font = `700 ${logoSize}px ${STATS_FONT}`
-      ctx.fillStyle = 'rgba(255,255,255,0.5)'
-      ctx.textAlign = 'right'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(LOGO_TEXT, w - w * 0.04, h - safeBottom - h * 0.01)
-    }
 
     // Photo overlay
     if (this.config.showTrailPhotos && this.photoGroups.length > 0) {
@@ -283,15 +292,15 @@ export class Story3DEngine implements IStoryEngine {
     }
   }
 
-  private drawHudStats(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  private drawHudStats(ctx: CanvasRenderingContext2D, w: number, h: number, progress: number) {
     const safeBottom = this.config.enableSafeZones ? (SAFE_ZONE_BOTTOM / 1920) * h : 0
     const statsY = h - safeBottom - h * 0.06
     const stats: { label: string; value: string }[] = []
 
-    if (this.config.showDistance) stats.push({ label: 'km', value: (this.data.distance / 1000).toFixed(1) })
-    if (this.config.showElevation) stats.push({ label: 'm↑', value: String(Math.round(this.data.elevationGain)) })
+    if (this.config.showDistance) stats.push({ label: 'km', value: (progress * this.data.distance / 1000).toFixed(1) })
+    if (this.config.showElevation) stats.push({ label: 'm↑', value: String(Math.round(this.data.elevationGain * progress)) })
     if (this.config.showTime) {
-      const t = this.data.movingTime
+      const t = Math.round(this.data.movingTime * progress)
       const hh = Math.floor(t / 3600)
       const mm = Math.floor((t % 3600) / 60)
       stats.push({ label: 'čas', value: `${hh}:${String(mm).padStart(2, '0')}` })

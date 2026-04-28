@@ -1,5 +1,12 @@
 export const LOGO_TEXT = 'TrailStories'
 
+export function formatActivityDate(dateStr: string | undefined): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`
+}
+
 export const GRADIENT_THEMES: Record<string, string[]> = {
   night:  ['#0a0a0f', '#1a1a2e', '#16213e'],
   forest: ['#0d1f0d', '#1a3d1a', '#2d5a27'],

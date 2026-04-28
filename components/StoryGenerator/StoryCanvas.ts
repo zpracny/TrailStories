@@ -1,7 +1,7 @@
 import { StoryConfig, ActivityStoryData, PhotoGroup, IStoryEngine, ASPECT_DIMENSIONS, EngineExportOptions } from './storyTypes'
 import {
   GRADIENT_THEMES, TRAIL_COLOR_START, TRAIL_COLOR_END, SUMMIT_COLOR, DAY_END_COLOR, HEAD_COLOR,
-  STATS_FONT, LOGO_TEXT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
+  STATS_FONT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM, formatActivityDate,
   MAX_SUMMIT_MARKERS, MAX_KM_MARKERS, MIN_KM_MARKER_PX, SUMMIT_MATCH_DIST_M,
   PHOTO_FADE_IN_MS, PHOTO_DISPLAY_MS, PHOTO_CROSSFADE_MS, PHOTO_FADE_OUT_MS,
   EXPORT_FPS, EXPORT_BITRATE, EXPORT_FORMAT, EXPORT_FALLBACK,
@@ -38,6 +38,9 @@ export class StoryCanvas implements IStoryEngine {
   private kmMarkers: KmMarker[] = []
   private summitMarkers: SummitMarker[] = []
   private dayEndMarkers: DayEndMarker[] = []
+
+  private cumulElevGain: number[] = []
+  private logoImg: HTMLImageElement | null = null
 
   private photoGroups: PhotoGroup[] = []
   private loadedImages: Map<string, HTMLImageElement> = new Map()
@@ -78,6 +81,25 @@ export class StoryCanvas implements IStoryEngine {
         this.elevation = await res.json()
       } catch { /* no elevation */ }
     }
+
+    // Precompute cumulative elevation gain
+    if (this.elevation) {
+      const alts = this.elevation.altitude
+      const gains: number[] = [0]
+      for (let i = 1; i < alts.length; i++) {
+        const diff = alts[i] - alts[i - 1]
+        gains.push(gains[i - 1] + (diff > 0 ? diff : 0))
+      }
+      this.cumulElevGain = gains
+    }
+
+    // Load logo image
+    this.logoImg = await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null as unknown as HTMLImageElement)
+      img.src = '/logo.png'
+    })
 
     // Load tiles for map background
     if (this.config.backgroundType === 'map') {
@@ -485,7 +507,7 @@ export class StoryCanvas implements IStoryEngine {
     ctx.fillStyle = '#ffffff'
     ctx.textBaseline = 'top'
     ctx.textAlign = 'left'
-    ctx.fillText(this.data.name, x, y)
+    ctx.fillText(formatActivityDate(this.data.activityStartDate), x, y)
   }
 
   private drawElevationProfile(ctx: CanvasRenderingContext2D, w: number, h: number, progress: number) {
@@ -553,14 +575,20 @@ export class StoryCanvas implements IStoryEngine {
     const stats: { label: string; value: string }[] = []
 
     if (this.config.showDistance) {
-      const d = (this.data.distance / 1000).toFixed(1)
-      stats.push({ label: 'km', value: d })
+      stats.push({ label: 'km', value: (progress * this.data.distance / 1000).toFixed(1) })
     }
     if (this.config.showElevation) {
-      stats.push({ label: 'm↑', value: String(Math.round(this.data.elevationGain)) })
+      let elev: number
+      if (this.cumulElevGain.length > 0) {
+        const idx = Math.round(progress * (this.cumulElevGain.length - 1))
+        elev = this.cumulElevGain[idx]
+      } else {
+        elev = this.data.elevationGain * progress
+      }
+      stats.push({ label: 'm↑', value: String(Math.round(elev)) })
     }
     if (this.config.showTime) {
-      const t = this.data.movingTime
+      const t = Math.round(progress * this.data.movingTime)
       const h2 = Math.floor(t / 3600)
       const m = Math.floor((t % 3600) / 60)
       stats.push({ label: 'čas', value: `${h2}:${String(m).padStart(2, '0')}` })
@@ -600,13 +628,13 @@ export class StoryCanvas implements IStoryEngine {
   }
 
   private drawLogo(ctx: CanvasRenderingContext2D, w: number, h: number) {
-    const safeBottom = this.config.enableSafeZones ? (SAFE_ZONE_BOTTOM / 1920) * h : 0
-    const fontSize = Math.round(h * 0.018)
-    ctx.font = `700 ${fontSize}px ${STATS_FONT}`
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'bottom'
-    ctx.fillText(LOGO_TEXT, w - w * 0.04, h - safeBottom - h * 0.01)
+    if (!this.logoImg) return
+    const safeTop = this.config.enableSafeZones ? (SAFE_ZONE_TOP / 1920) * h : h * 0.04
+    const logoH = Math.round(h * 0.036)
+    const logoW = Math.round(logoH * (this.logoImg.naturalWidth / this.logoImg.naturalHeight))
+    ctx.globalAlpha = 0.85
+    ctx.drawImage(this.logoImg, w - w * 0.06 - logoW, safeTop + h * 0.015, logoW, logoH)
+    ctx.globalAlpha = 1
   }
 
   private drawPhotoOverlay(ctx: CanvasRenderingContext2D, w: number, h: number, progress: number) {

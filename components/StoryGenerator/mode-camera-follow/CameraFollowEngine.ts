@@ -2,8 +2,8 @@ import maplibregl from 'maplibre-gl'
 import { StoryConfig, ActivityStoryData, PhotoGroup, IStoryEngine, ASPECT_DIMENSIONS, EngineExportOptions } from '../storyTypes'
 import {
   TRAIL_COLOR_START, TRAIL_COLOR_END,
-  STATS_FONT, LOGO_TEXT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
-  EXPORT_FPS,
+  STATS_FONT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
+  EXPORT_FPS, formatActivityDate,
 } from '../storyConstants'
 import { decodePolyline, simplifyTrail, computeCumulativeDistances, getPositionAtProgress } from '../trailProjection'
 import { getCameraFollowStyle } from '../story3DStyles'
@@ -32,6 +32,8 @@ export class CameraFollowEngine implements IStoryEngine {
   private animFrame: number | null = null
   private lastTime: number | null = null
   private isPlaying = false
+
+  private logoImg: HTMLImageElement | null = null
 
   private photoGroups: PhotoGroup[] = []
   private loadedImages: Map<string, HTMLImageElement> = new Map()
@@ -71,6 +73,14 @@ export class CameraFollowEngine implements IStoryEngine {
     }
 
     if (this.latlngs.length === 0) return
+
+    // Load logo image
+    this.logoImg = await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null as unknown as HTMLImageElement)
+      img.src = '/logo.png'
+    })
 
     const startPos = this.latlngs[0]
     const zoom = calcZoomForKm(this.config.cfViewportKm, startPos[0])
@@ -169,7 +179,16 @@ export class CameraFollowEngine implements IStoryEngine {
     ctx.fillStyle = '#ffffff'
     ctx.textBaseline = 'top'
     ctx.textAlign = 'left'
-    ctx.fillText(this.data.name, w * 0.05, safeTop + h * 0.015)
+    ctx.fillText(formatActivityDate(this.data.activityStartDate), w * 0.05, safeTop + h * 0.015)
+
+    // Logo top-right
+    if (this.config.showLogo && this.logoImg) {
+      const logoH = Math.round(h * 0.036)
+      const logoW = Math.round(logoH * (this.logoImg.naturalWidth / this.logoImg.naturalHeight))
+      ctx.globalAlpha = 0.85
+      ctx.drawImage(this.logoImg, w - w * 0.06 - logoW, safeTop + h * 0.008, logoW, logoH)
+      ctx.globalAlpha = 1
+    }
 
     // Moving dot (drawn via MapLibre marker concept — we draw on HUD)
     const pos = getPositionAtProgress(this.latlngs, this.cumulDists, progress)
@@ -261,16 +280,6 @@ export class CameraFollowEngine implements IStoryEngine {
     grad.addColorStop(1, TRAIL_COLOR_END)
     ctx.fillStyle = grad
     ctx.fillRect(0, barY, w * progress, barH)
-
-    // Logo
-    if (this.config.showLogo) {
-      const logoSize = Math.round(h * 0.016)
-      ctx.font = `700 ${logoSize}px ${STATS_FONT}`
-      ctx.fillStyle = 'rgba(255,255,255,0.5)'
-      ctx.textAlign = 'right'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(LOGO_TEXT, w - w * 0.04, h - safeBottom - h * 0.008)
-    }
 
     // Photo overlay
     if (this.config.showTrailPhotos && this.photoGroups.length > 0) {

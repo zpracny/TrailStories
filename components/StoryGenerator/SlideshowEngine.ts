@@ -1,5 +1,5 @@
 import { StoryConfig, ActivityStoryData, PhotoItem, IStoryEngine, ASPECT_DIMENSIONS, EngineExportOptions } from './storyTypes'
-import { STATS_FONT, LOGO_TEXT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM, EXPORT_FPS, EXPORT_BITRATE, EXPORT_FORMAT, EXPORT_FALLBACK } from './storyConstants'
+import { STATS_FONT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM, EXPORT_FPS, EXPORT_BITRATE, EXPORT_FORMAT, EXPORT_FALLBACK, formatActivityDate } from './storyConstants'
 
 type Transition = 'crossfade' | 'slide' | 'zoom'
 
@@ -15,6 +15,7 @@ export class SlideshowEngine implements IStoryEngine {
 
   private photos: PhotoItem[] = []
   private loadedImages: Map<string, HTMLImageElement> = new Map()
+  private logoImg: HTMLImageElement | null = null
 
   private progress = 0
   private duration = 10000
@@ -37,6 +38,13 @@ export class SlideshowEngine implements IStoryEngine {
       this.renderPlaceholder()
       return
     }
+
+    this.logoImg = await new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => resolve(null as unknown as HTMLImageElement)
+      img.src = '/logo.png'
+    })
 
     await Promise.allSettled(
       this.photos.map(
@@ -136,21 +144,30 @@ export class SlideshowEngine implements IStoryEngine {
     ctx.fillStyle = botFade
     ctx.fillRect(0, h * 0.75, w, h * 0.25)
 
-    // Activity name
+    // Date top-left
     const safeTop = this.config.enableSafeZones ? (SAFE_ZONE_TOP / 1920) * h : h * 0.04
     const nameFontSize = Math.round(h * 0.028)
     ctx.font = `700 ${nameFontSize}px ${STATS_FONT}`
     ctx.fillStyle = '#ffffff'
     ctx.textBaseline = 'top'
     ctx.textAlign = 'left'
-    ctx.fillText(this.data.name, w * 0.06, safeTop + h * 0.02)
+    ctx.fillText(formatActivityDate(this.data.activityStartDate), w * 0.06, safeTop + h * 0.02)
+
+    // Logo top-right
+    if (this.config.showLogo && this.logoImg) {
+      const logoH = Math.round(h * 0.036)
+      const logoW = Math.round(logoH * (this.logoImg.naturalWidth / this.logoImg.naturalHeight))
+      ctx.globalAlpha = 0.85
+      ctx.drawImage(this.logoImg, w - w * 0.06 - logoW, safeTop + h * 0.015, logoW, logoH)
+      ctx.globalAlpha = 1
+    }
 
     // Stats
     const safeBottom = this.config.enableSafeZones ? (SAFE_ZONE_BOTTOM / 1920) * h : 0
     const statsY = h - safeBottom - h * 0.06
     const statsData: { label: string; value: string }[] = [
-      { label: 'km', value: (this.data.distance / 1000).toFixed(1) },
-      { label: 'm↑', value: String(Math.round(this.data.elevationGain)) },
+      { label: 'km', value: (progress * this.data.distance / 1000).toFixed(1) },
+      { label: 'm↑', value: String(Math.round(this.data.elevationGain * progress)) },
     ]
     const fontSize = Math.round(h * 0.03)
     const labelSize = Math.round(h * 0.016)
@@ -175,23 +192,13 @@ export class SlideshowEngine implements IStoryEngine {
     ctx.fillStyle = '#f97316'
     ctx.fillRect(0, barY, w * progress, barH)
 
-    // Slide counter
+    // Slide counter bottom-right
     const counterFontSize = Math.round(h * 0.018)
     ctx.font = `400 ${counterFontSize}px ${STATS_FONT}`
-    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'
     ctx.textAlign = 'right'
-    ctx.textBaseline = 'top'
-    ctx.fillText(`${currentIdx + 1} / ${n}`, w - w * 0.05, safeTop + h * 0.02)
-
-    // Logo
-    if (this.config.showLogo) {
-      const logoSize = Math.round(h * 0.018)
-      ctx.font = `700 ${logoSize}px ${STATS_FONT}`
-      ctx.fillStyle = 'rgba(255,255,255,0.5)'
-      ctx.textAlign = 'right'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(LOGO_TEXT, w - w * 0.04, h - safeBottom - h * 0.01)
-    }
+    ctx.textBaseline = 'bottom'
+    ctx.fillText(`${currentIdx + 1} / ${n}`, w - w * 0.05, h - safeBottom - h * 0.01)
   }
 
   setPhotoPauses() { /* not used */ }
