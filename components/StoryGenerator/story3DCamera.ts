@@ -8,13 +8,30 @@ export interface CameraKeyframe {
   pitch: number
 }
 
-function subsample(latlngs: [number, number][], count: number): [number, number][] {
+// Sample `count` evenly-spaced-by-distance points along the route
+function distanceSubsample(
+  latlngs: [number, number][],
+  cumulDists: number[],
+  count: number
+): [number, number][] {
   if (latlngs.length <= count) return latlngs
+  const totalDist = cumulDists[cumulDists.length - 1]
   const result: [number, number][] = []
-  const step = (latlngs.length - 1) / (count - 1)
   for (let i = 0; i < count; i++) {
-    const idx = Math.min(Math.round(i * step), latlngs.length - 1)
-    result.push(latlngs[idx])
+    const targetDist = (i / (count - 1)) * totalDist
+    let lo = 0, hi = latlngs.length - 1
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1
+      if (cumulDists[mid] <= targetDist) lo = mid
+      else hi = mid
+    }
+    const segLen = cumulDists[hi] - cumulDists[lo]
+    if (segLen === 0) { result.push(latlngs[lo]); continue }
+    const t = (targetDist - cumulDists[lo]) / segLen
+    result.push([
+      latlngs[lo][0] + t * (latlngs[hi][0] - latlngs[lo][0]),
+      latlngs[lo][1] + t * (latlngs[hi][1] - latlngs[lo][1]),
+    ])
   }
   return result
 }
@@ -60,11 +77,12 @@ function clampBearingRate(bearings: number[], maxRate: number): number[] {
 
 export function computeCameraPath(
   latlngs: [number, number][],
+  cumulDists: number[],
   baseZoom: number,
   altitude: number,
   pitch: number
 ): CameraKeyframe[] {
-  const pts = subsample(latlngs, CAMERA_KEYFRAMES)
+  const pts = distanceSubsample(latlngs, cumulDists, CAMERA_KEYFRAMES)
   const n = pts.length
 
   // Compute raw bearings using lookahead

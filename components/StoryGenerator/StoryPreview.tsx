@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
-import { StoryConfig, ActivityStoryData, IStoryEngine, ASPECT_DIMENSIONS } from './storyTypes'
+import { StoryConfig, ActivityStoryData, IStoryEngine, ASPECT_DIMENSIONS, ExportFormat } from './storyTypes'
 import { StoryCanvas } from './StoryCanvas'
 import { Story3DEngine } from './Story3DEngine'
 import { SlideshowEngine } from './SlideshowEngine'
@@ -11,7 +11,7 @@ import {
 import { decodePolyline, simplifyTrail } from './trailProjection'
 
 export interface StoryPreviewRef {
-  exportVideo(): Promise<void>
+  exportVideo(format?: ExportFormat): Promise<void>
 }
 
 interface StoryPreviewProps {
@@ -104,11 +104,11 @@ export const StoryPreview = forwardRef<StoryPreviewRef, StoryPreviewProps>(
 
     // Expose export via ref
     useImperativeHandle(ref, () => ({
-      async exportVideo() {
+      async exportVideo(format?: ExportFormat) {
         if (!engineRef.current || isExporting) return
         setIsExporting(true)
         try {
-          const blob = await engineRef.current.export({ onProgress: onExportProgress })
+          const blob = await engineRef.current.export({ onProgress: onExportProgress, format })
           onExportDone?.(blob)
         } finally {
           setIsExporting(false)
@@ -137,7 +137,9 @@ export const StoryPreview = forwardRef<StoryPreviewRef, StoryPreviewProps>(
             className="w-full h-full"
           />
         ) : (
-          <div ref={mapContainerRef} className="absolute inset-0" />
+          <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex' }}>
+          <div ref={mapContainerRef} style={{ flex: 1, minHeight: 0 }} />
+        </div>
         )}
 
         {/* Play/Pause overlay — visible on hover, hidden when Timeline is present */}

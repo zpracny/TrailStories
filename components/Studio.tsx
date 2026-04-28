@@ -1,6 +1,6 @@
 'use client'
-import { useState, useCallback, useRef } from 'react'
-import { ActivityStoryData, StoryConfig, ASPECT_DIMENSIONS } from '@/components/StoryGenerator/storyTypes'
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
+import { ActivityStoryData, StoryConfig, ASPECT_DIMENSIONS, ExportFormat } from '@/components/StoryGenerator/storyTypes'
 import { StoryPreview, StoryPreviewRef } from '@/components/StoryGenerator/StoryPreview'
 import { StudioTopbar } from '@/components/StudioTopbar'
 import { StudioActivityBar } from '@/components/StudioActivityBar'
@@ -23,7 +23,7 @@ const DEFAULT_CONFIG: StoryConfig = {
   showPOI: false,
   showTrailPhotos: false,
 
-  backgroundType: 'gradient',
+  backgroundType: 'map',
   gradientTheme: 'night',
   mapStyle: 'standard',
   showElevationProfile: true,
@@ -31,7 +31,7 @@ const DEFAULT_CONFIG: StoryConfig = {
 
   mapStyle3D: 'satellite-3d',
   cameraPitch: 55,
-  cameraAltitude: 800,
+  cameraAltitude: 400,
   terrainExaggeration: 1.5,
   showHillshade: true,
 
@@ -55,6 +55,7 @@ export function Studio({ data }: StudioProps) {
   const [config, setConfig] = useState<StoryConfig>(DEFAULT_CONFIG)
   const [exportProgress, setExportProgress] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4')
   const previewRef = useRef<StoryPreviewRef>(null)
 
   const handleConfigChange = useCallback((patch: Partial<StoryConfig>) => {
@@ -65,7 +66,7 @@ export function Studio({ data }: StudioProps) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'trailstory.webm'
+    a.download = blob.type === 'video/mp4' ? 'trailstory.mp4' : 'trailstory.webm'
     a.click()
     URL.revokeObjectURL(url)
     setExportProgress(1)
@@ -73,18 +74,58 @@ export function Studio({ data }: StudioProps) {
 
   const handleExportStart = useCallback(() => {
     setExportProgress(0)
-    previewRef.current?.exportVideo()
-  }, [])
+    previewRef.current?.exportVideo(exportFormat)
+  }, [exportFormat])
 
   const dims = ASPECT_DIMENSIONS[config.aspectRatio]
   const isExporting = exportProgress !== null && exportProgress < 1
 
-  const canExport = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined' &&
+  // Compute preview container pixel dimensions to fit the available area
+  // while maintaining the exact aspect ratio. CSS aspect-ratio with percentage
+  // dimensions is unreliable in nested flex containers, so we measure and compute.
+  const previewAreaRef = useRef<HTMLDivElement>(null)
+  const [previewArea, setPreviewArea] = useState({ w: 0, h: 0 })
+
+  useLayoutEffect(() => {
+    const el = previewAreaRef.current
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    if (width > 0 && height > 0) setPreviewArea({ w: width, h: height })
+  }, [])
+
+  useEffect(() => {
+    const el = previewAreaRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      setPreviewArea({ w: width, h: height })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const ar = dims.width / dims.height
+  let pw = previewArea.w
+  let ph = pw / ar
+  if (previewArea.h > 0 && ph > previewArea.h) { ph = previewArea.h; pw = ph * ar }
+  pw = Math.floor(pw)
+  ph = Math.floor(ph)
+
+  const canExportWebM = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined' &&
     (MediaRecorder.isTypeSupported?.('video/webm') || MediaRecorder.isTypeSupported?.('video/webm;codecs=vp9'))
+  const canExportMP4 = typeof window !== 'undefined' && typeof VideoEncoder !== 'undefined'
+  const canExport = canExportWebM || canExportMP4
 
   return (
     <div className="flex flex-col h-dvh bg-[var(--bg)] overflow-hidden">
-      <StudioTopbar data={data} onExport={handleExportStart} isExporting={isExporting} />
+      <StudioTopbar
+        data={data}
+        onExport={handleExportStart}
+        isExporting={isExporting}
+        exportFormat={exportFormat}
+        onFormatChange={setExportFormat}
+        canExportMP4={canExportMP4}
+      />
       <StudioActivityBar data={data} />
 
       {!canExport && (
@@ -123,24 +164,20 @@ export function Studio({ data }: StudioProps) {
           </div>
 
           {/* Preview canvas area */}
-          <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-            <div
-              style={
-                dims.width >= dims.height
-                  ? { width: '100%', maxHeight: '100%', aspectRatio: `${dims.width} / ${dims.height}` }
-                  : { height: '100%', maxWidth: '100%', aspectRatio: `${dims.width} / ${dims.height}` }
-              }
-            >
-              <StoryPreview
-                ref={previewRef}
-                config={config}
-                data={data}
-                isPlaying={isPlaying}
-                onPlayChange={setIsPlaying}
-                onExportProgress={setExportProgress}
-                onExportDone={handleExportDone}
-              />
-            </div>
+          <div ref={previewAreaRef} className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
+            {pw > 0 && ph > 0 && (
+              <div style={{ width: pw, height: ph, flexShrink: 0 }}>
+                <StoryPreview
+                  ref={previewRef}
+                  config={config}
+                  data={data}
+                  isPlaying={isPlaying}
+                  onPlayChange={setIsPlaying}
+                  onExportProgress={setExportProgress}
+                  onExportDone={handleExportDone}
+                />
+              </div>
+            )}
           </div>
 
           {/* Timeline */}
@@ -163,6 +200,7 @@ export function Studio({ data }: StudioProps) {
       {exportProgress !== null && (
         <ExportProgress
           progress={exportProgress}
+          format={exportFormat}
           onDismiss={exportProgress >= 1 ? () => setExportProgress(null) : undefined}
         />
       )}

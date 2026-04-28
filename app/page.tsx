@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
+import Image from 'next/image'
 import { LandingUpload } from '@/components/LandingUpload'
 
 // ─── Decorative trail data (for animated hero background & phone mockup) ───
@@ -335,7 +336,7 @@ export default function Home() {
       {/* NAV */}
       <nav className="relative z-10 max-w-[1280px] mx-auto px-8 pt-7 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="t-display text-[28px] text-white tracking-wider">TRAILSTORIES</span>
+          <Image src="/logo.png" alt="TrailStories" height={48} width={170} style={{ height: 48, width: 'auto' }} priority />
           <span className="chip text-[10px]" style={{ borderColor: ACCENT, color: ACCENT, padding: '2px 8px' }}>BETA</span>
         </div>
         <div className="hidden md:flex items-center gap-6">

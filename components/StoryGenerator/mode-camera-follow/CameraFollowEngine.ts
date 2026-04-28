@@ -3,7 +3,7 @@ import { StoryConfig, ActivityStoryData, PhotoGroup, IStoryEngine, ASPECT_DIMENS
 import {
   TRAIL_COLOR_START, TRAIL_COLOR_END,
   STATS_FONT, LOGO_TEXT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
-  EXPORT_FPS, EXPORT_BITRATE, EXPORT_FORMAT, EXPORT_FALLBACK,
+  EXPORT_FPS,
 } from '../storyConstants'
 import { decodePolyline, simplifyTrail, computeCumulativeDistances, getPositionAtProgress } from '../trailProjection'
 import { getCameraFollowStyle } from '../story3DStyles'
@@ -352,47 +352,54 @@ export class CameraFollowEngine implements IStoryEngine {
 
   async export(options?: EngineExportOptions): Promise<Blob> {
     const dims = ASPECT_DIMENSIONS[this.config.aspectRatio]
+    const totalFrames = Math.round((this.duration / 1000) * EXPORT_FPS)
+
     const exportCanvas = document.createElement('canvas')
     exportCanvas.width = dims.width
     exportCanvas.height = dims.height
     const exportCtx = exportCanvas.getContext('2d')!
 
-    const mimeType = MediaRecorder.isTypeSupported(EXPORT_FORMAT) ? EXPORT_FORMAT
-      : MediaRecorder.isTypeSupported(EXPORT_FALLBACK) ? EXPORT_FALLBACK : 'video/webm'
+    const prevFlex = this.container.style.flex
+    const prevW = this.container.style.width
+    const prevH = this.container.style.height
+    this.container.style.flex = 'none'
+    this.container.style.width = `${dims.width}px`
+    this.container.style.height = `${dims.height}px`
+    this.map!.resize()
+    this.resizeHud()
 
-    const stream = exportCanvas.captureStream(0)
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: EXPORT_BITRATE })
-    const chunks: BlobPart[] = []
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
-
-    return new Promise(resolve => {
-      recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }))
-      recorder.start()
-
-      const totalFrames = Math.round((this.duration / 1000) * EXPORT_FPS)
-      let frame = 0
-
-      const renderFrame = () => {
-        if (frame > totalFrames) { recorder.stop(); return }
-        const p = frame / totalFrames
-        this.updateFrame(p)
-        if (this.map) {
-          this.map.once('render', () => {
-            exportCtx.drawImage(this.map!.getCanvas(), 0, 0, dims.width, dims.height)
-            exportCtx.drawImage(this.hudCanvas, 0, 0, dims.width, dims.height)
-            ;(stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }).requestFrame?.()
-            options?.onProgress?.(p)
-            frame++
-            requestAnimationFrame(renderFrame)
-          })
-          this.map.triggerRepaint()
-        } else {
-          frame++
-          requestAnimationFrame(renderFrame)
-        }
-      }
-      requestAnimationFrame(renderFrame)
+    const waitForRender = (): Promise<void> => new Promise(resolve => {
+      this.map!.once('render', () => resolve())
+      this.map!.triggerRepaint()
     })
+
+    await waitForRender()
+
+    const { encodeVideo } = await import('../videoExport')
+    let result: Blob
+    try {
+      result = await encodeVideo(
+        exportCanvas,
+        totalFrames,
+        options?.format ?? 'webm',
+        async (_frame, progress) => {
+          this.updateFrame(progress)
+          if (this.map) {
+            await waitForRender()
+            exportCtx.drawImage(this.map.getCanvas(), 0, 0, dims.width, dims.height)
+            exportCtx.drawImage(this.hudCanvas, 0, 0, dims.width, dims.height)
+          }
+        },
+        options?.onProgress,
+      )
+    } finally {
+      this.container.style.flex = prevFlex
+      this.container.style.width = prevW
+      this.container.style.height = prevH
+      this.map?.resize()
+      this.resizeHud()
+    }
+    return result
   }
 
   destroy() {

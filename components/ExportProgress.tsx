@@ -1,11 +1,13 @@
 'use client'
+import type { ExportFormat } from '@/components/StoryGenerator/storyTypes'
 
 interface ExportProgressProps {
   progress: number
+  format?: ExportFormat
   onDismiss?: () => void
 }
 
-export function ExportProgress({ progress, onDismiss }: ExportProgressProps) {
+export function ExportProgress({ progress, format = 'mp4', onDismiss }: ExportProgressProps) {
   const pct = Math.round(progress * 100)
   const done = pct >= 100
 
@@ -46,8 +48,8 @@ export function ExportProgress({ progress, onDismiss }: ExportProgressProps) {
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
             ['1080p', 'QUALITY'],
-            ['WebM', 'FORMAT'],
-            ['VP9', 'CODEC'],
+            [format === 'mp4' ? 'MP4' : 'WebM', 'FORMAT'],
+            [format === 'mp4' ? 'H.264' : 'VP9', 'CODEC'],
           ].map(([v, l]) => (
             <div key={l} className="text-center py-2 rounded-lg bg-white/[0.02] border border-[var(--border)]">
               <div className="t-mono text-[13px] font-semibold">{v}</div>

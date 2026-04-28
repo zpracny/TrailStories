@@ -67,6 +67,7 @@ export class StoryCanvas implements IStoryEngine {
     this.latlngs = simplifyTrail(this.latlngs, 0.00005)
     this.cumulDists = computeCumulativeDistances(this.latlngs)
     this.bounds = getTrailBounds(this.latlngs, 0.10)
+    this.adjustBoundsForAspectRatio()
 
     // Load elevation
     if (this.data.preloadedElevation) {
@@ -98,6 +99,25 @@ export class StoryCanvas implements IStoryEngine {
 
     this.buildMarkers()
     this.render(0)
+  }
+
+  private adjustBoundsForAspectRatio() {
+    const canvasAR = this.canvas.width / this.canvas.height
+    const lngSpan = this.bounds.maxLng - this.bounds.minLng
+    const latSpan = this.bounds.maxLat - this.bounds.minLat
+    const geoAR = lngSpan / latSpan
+
+    if (geoAR < canvasAR) {
+      const newLng = latSpan * canvasAR
+      const midLng = (this.bounds.minLng + this.bounds.maxLng) / 2
+      this.bounds.minLng = midLng - newLng / 2
+      this.bounds.maxLng = midLng + newLng / 2
+    } else if (geoAR > canvasAR) {
+      const newLat = lngSpan / canvasAR
+      const midLat = (this.bounds.minLat + this.bounds.maxLat) / 2
+      this.bounds.minLat = midLat - newLat / 2
+      this.bounds.maxLat = midLat + newLat / 2
+    }
   }
 
   private buildMarkers() {
@@ -625,52 +645,24 @@ export class StoryCanvas implements IStoryEngine {
 
   async export(options?: EngineExportOptions): Promise<Blob> {
     const dims = ASPECT_DIMENSIONS[this.config.aspectRatio]
+    const totalFrames = Math.round((this.duration / 1000) * EXPORT_FPS)
+
     const exportCanvas = document.createElement('canvas')
     exportCanvas.width = dims.width
     exportCanvas.height = dims.height
     const exportCtx = exportCanvas.getContext('2d')!
 
-    // Scale canvas context to match export resolution
-    const scaleX = dims.width / this.canvas.width
-    const scaleY = dims.height / this.canvas.height
-
-    const mimeType = MediaRecorder.isTypeSupported(EXPORT_FORMAT)
-      ? EXPORT_FORMAT
-      : MediaRecorder.isTypeSupported(EXPORT_FALLBACK)
-      ? EXPORT_FALLBACK
-      : 'video/webm'
-
-    const stream = exportCanvas.captureStream(0)
-    const recorder = new MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: EXPORT_BITRATE,
-    })
-
-    const chunks: BlobPart[] = []
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
-
-    return new Promise(resolve => {
-      recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }))
-      recorder.start()
-
-      const totalFrames = Math.round((this.duration / 1000) * EXPORT_FPS)
-      let frame = 0
-
-      const renderFrame = () => {
-        if (frame > totalFrames) { recorder.stop(); return }
-
-        const p = frame / totalFrames
-        // Render to main canvas then copy scaled
-        this.render(p)
+    const { encodeVideo } = await import('./videoExport')
+    return encodeVideo(
+      exportCanvas,
+      totalFrames,
+      options?.format ?? 'webm',
+      (_frame, progress) => {
+        this.render(progress)
         exportCtx.drawImage(this.canvas, 0, 0, dims.width, dims.height)
-        ;(stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }).requestFrame?.()
-
-        options?.onProgress?.(frame / totalFrames)
-        frame++
-        requestAnimationFrame(renderFrame)
-      }
-      requestAnimationFrame(renderFrame)
-    })
+      },
+      options?.onProgress,
+    )
   }
 
   destroy() {

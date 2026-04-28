@@ -1,11 +1,14 @@
 'use client'
-import { ActivityStoryData } from '@/components/StoryGenerator/storyTypes'
+import { ActivityStoryData, ExportFormat } from '@/components/StoryGenerator/storyTypes'
 import Link from 'next/link'
 
 interface StudioTopbarProps {
   data: ActivityStoryData
   onExport: () => void
   isExporting: boolean
+  exportFormat: ExportFormat
+  onFormatChange: (f: ExportFormat) => void
+  canExportMP4: boolean
 }
 
 function fmtDist(m: number) { return (m / 1000).toFixed(1) + ' KM' }
@@ -16,7 +19,7 @@ function fmtTime(s: number) {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')} H` : `${m} MIN`
 }
 
-export function StudioTopbar({ data, onExport, isExporting }: StudioTopbarProps) {
+export function StudioTopbar({ data, onExport, isExporting, exportFormat, onFormatChange, canExportMP4 }: StudioTopbarProps) {
   return (
     <header className="flex items-center justify-between h-14 px-5 border-b border-[var(--border)] bg-[var(--panel)] shrink-0">
       <div className="flex items-center gap-4 min-w-0">
@@ -39,6 +42,25 @@ export function StudioTopbar({ data, onExport, isExporting }: StudioTopbarProps)
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {/* Format toggle */}
+        {!isExporting && (
+          <div className="flex rounded-md border border-[var(--border-2)] bg-white/[0.02] p-0.5 text-xs">
+            {(['mp4', 'webm'] as ExportFormat[]).map(fmt => (
+              <button
+                key={fmt}
+                onClick={() => onFormatChange(fmt)}
+                disabled={fmt === 'mp4' && !canExportMP4}
+                className={`px-2.5 py-1 rounded t-mono transition-colors disabled:opacity-30 ${
+                  exportFormat === fmt
+                    ? 'bg-white/10 text-white'
+                    : 'text-[var(--muted)] hover:text-white'
+                }`}
+              >
+                {fmt.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           onClick={onExport}
           disabled={isExporting}

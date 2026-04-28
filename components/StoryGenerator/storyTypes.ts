@@ -139,8 +139,11 @@ export interface PhotoPauseState {
   alpha: number
 }
 
+export type ExportFormat = 'webm' | 'mp4'
+
 export interface EngineExportOptions {
   onProgress?: (progress: number) => void
+  format?: ExportFormat
 }
 
 export interface IStoryEngine {

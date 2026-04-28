@@ -3,7 +3,7 @@ import { StoryConfig, ActivityStoryData, PhotoGroup, IStoryEngine, ASPECT_DIMENS
 import {
   TRAIL_COLOR_START, TRAIL_COLOR_END, SUMMIT_COLOR, DAY_END_COLOR,
   STATS_FONT, LOGO_TEXT, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM,
-  EXPORT_FPS, EXPORT_BITRATE, EXPORT_FORMAT, EXPORT_FALLBACK,
+  EXPORT_FPS,
 } from './storyConstants'
 import { decodePolyline, simplifyTrail, computeCumulativeDistances, getPositionAtProgress, haversineDistance } from './trailProjection'
 import { computeCameraPath, interpolateCamera } from './story3DCamera'
@@ -59,9 +59,10 @@ export class Story3DEngine implements IStoryEngine {
 
     if (this.latlngs.length === 0) return
 
-    // Camera path
+    // Camera path — distance-based keyframes so speed is linear to distance
     this.cameraFrames = computeCameraPath(
       this.latlngs,
+      this.cumulDists,
       12,
       this.config.cameraAltitude,
       this.config.cameraPitch
@@ -83,6 +84,7 @@ export class Story3DEngine implements IStoryEngine {
       pitch: firstFrame.pitch,
       attributionControl: false,
       interactive: false,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     })
 
     this.map.once('load', () => {
@@ -183,33 +185,25 @@ export class Story3DEngine implements IStoryEngine {
     }
   }
 
-  private interpolatedCoord(progress: number): [number, number] {
-    const n = this.latlngs.length
-    const totalIdx = Math.max(0, Math.min(n - 1, progress * (n - 1)))
-    const lo = Math.floor(totalIdx)
-    const frac = totalIdx - lo
-    if (frac === 0 || lo >= n - 1) return this.latlngs[Math.min(lo, n - 1)]
-    const a = this.latlngs[lo], b = this.latlngs[lo + 1]
-    return [a[0] + frac * (b[0] - a[0]), a[1] + frac * (b[1] - a[1])]
-  }
-
   private updateActiveTrail(progress: number) {
     if (!this.map || !this.map.getSource('active-trail')) return
-    const n = this.latlngs.length
-    const totalIdx = progress * (n - 1)
-    const endIdx = Math.floor(totalIdx)
-    const frac = totalIdx - endIdx
+    const totalDist = this.cumulDists[this.cumulDists.length - 1]
+    const targetDist = progress * totalDist
 
-    const coords = this.latlngs.slice(0, endIdx + 1).map(([lat, lng]) => [lng, lat] as [number, number])
-    // Add interpolated fractional endpoint
-    if (frac > 0 && endIdx + 1 < n) {
-      const [lat, lng] = this.interpolatedCoord(progress)
-      coords.push([lng, lat])
+    // Binary search: last index at or before targetDist
+    let lo = 0, hi = this.latlngs.length - 1
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1
+      if (this.cumulDists[mid] <= targetDist) lo = mid
+      else hi = mid
     }
-    if (coords.length < 2) return
 
-    const src = this.map.getSource('active-trail') as maplibregl.GeoJSONSource
-    src.setData({
+    const coords = this.latlngs.slice(0, lo + 1).map(([lat, lng]) => [lng, lat] as [number, number])
+    const pos = getPositionAtProgress(this.latlngs, this.cumulDists, progress)
+    coords.push([pos[1], pos[0]])
+
+    if (coords.length < 2) return
+    ;(this.map.getSource('active-trail') as maplibregl.GeoJSONSource).setData({
       type: 'Feature',
       properties: {},
       geometry: { type: 'LineString', coordinates: coords },
@@ -368,51 +362,58 @@ export class Story3DEngine implements IStoryEngine {
 
   async export(options?: EngineExportOptions): Promise<Blob> {
     const dims = ASPECT_DIMENSIONS[this.config.aspectRatio]
+    const totalFrames = Math.round((this.duration / 1000) * EXPORT_FPS)
+
     const exportCanvas = document.createElement('canvas')
     exportCanvas.width = dims.width
     exportCanvas.height = dims.height
     const exportCtx = exportCanvas.getContext('2d')!
 
-    const mimeType = MediaRecorder.isTypeSupported(EXPORT_FORMAT) ? EXPORT_FORMAT
-      : MediaRecorder.isTypeSupported(EXPORT_FALLBACK) ? EXPORT_FALLBACK : 'video/webm'
+    // Force the map container to exact export dimensions so MapLibre renders at
+    // the correct aspect ratio. Without this, the preview container size (which
+    // can differ in ratio) would be scaled to the export canvas, causing distortion.
+    const prevFlex = this.container.style.flex
+    const prevW = this.container.style.width
+    const prevH = this.container.style.height
+    this.container.style.flex = 'none'
+    this.container.style.width = `${dims.width}px`
+    this.container.style.height = `${dims.height}px`
+    this.map!.resize()
+    this.resizeHud()
 
-    const stream = exportCanvas.captureStream(0)
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: EXPORT_BITRATE })
-    const chunks: BlobPart[] = []
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
-
-    return new Promise(resolve => {
-      recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }))
-      recorder.start()
-
-      const totalFrames = Math.round((this.duration / 1000) * EXPORT_FPS)
-      let frame = 0
-
-      const renderFrame = () => {
-        if (frame > totalFrames) { recorder.stop(); return }
-
-        const p = frame / totalFrames
-        this.updateFrame(p)
-
-        // Wait for MapLibre render
-        if (this.map) {
-          this.map.once('render', () => {
-            const mapCanvas = this.map!.getCanvas()
-            exportCtx.drawImage(mapCanvas, 0, 0, dims.width, dims.height)
-            exportCtx.drawImage(this.hudCanvas, 0, 0, dims.width, dims.height)
-            ;(stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void }).requestFrame?.()
-            options?.onProgress?.(frame / totalFrames)
-            frame++
-            requestAnimationFrame(renderFrame)
-          })
-          this.map.triggerRepaint()
-        } else {
-          frame++
-          requestAnimationFrame(renderFrame)
-        }
-      }
-      requestAnimationFrame(renderFrame)
+    const waitForRender = (): Promise<void> => new Promise(resolve => {
+      this.map!.once('render', () => resolve())
+      this.map!.triggerRepaint()
     })
+
+    // Wait for first render at export resolution before encoding
+    await waitForRender()
+
+    const { encodeVideo } = await import('./videoExport')
+    let result: Blob
+    try {
+      result = await encodeVideo(
+        exportCanvas,
+        totalFrames,
+        options?.format ?? 'webm',
+        async (_frame, progress) => {
+          this.updateFrame(progress)
+          if (this.map) {
+            await waitForRender()
+            exportCtx.drawImage(this.map.getCanvas(), 0, 0, dims.width, dims.height)
+            exportCtx.drawImage(this.hudCanvas, 0, 0, dims.width, dims.height)
+          }
+        },
+        options?.onProgress,
+      )
+    } finally {
+      this.container.style.flex = prevFlex
+      this.container.style.width = prevW
+      this.container.style.height = prevH
+      this.map?.resize()
+      this.resizeHud()
+    }
+    return result
   }
 
   destroy() {
